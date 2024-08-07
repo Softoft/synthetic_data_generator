@@ -1,0 +1,5 @@
+openai~=1.40.0
+pytest~=8.3.2
+setuptools~=72.1.0
+tenacity~=9.0.0
+numpy~=2.0.1

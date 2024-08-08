@@ -1,25 +1,39 @@
 import json
-import logging
-from typing import Any
+from typing import Any, Coroutine, Optional
 
 import openai
-from openai import AsyncOpenAI, BaseModel
-from pydantic import Field
+from openai import AsyncOpenAI
+from openai.types.chat import ParsedChatCompletion
+from pydantic import BaseModel, Field
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_random_exponential
 
 from src.synthetic_data_generator.ai_graph.ai.chat_assistant_analysis import cost_analyzer
+from src.synthetic_data_generator.ai_graph.ai.chat_assistant_config import AssistantModel
 
 
-@cost_analyzer()
 class ChatAssistant(BaseModel):
+    """
+    Args:
+        assistant_name: The name of the assistant.
+        client: The OpenAI client.
+        temperature: The temperature of the model.
+        max_tokens: The maximum number of tokens to generate.
+        response_schema: The response schema.
+        instructions: The instructions for the assistant.
+        model: The model to use.
+        retry_wait_min: The minimum wait time for retries.
+        retry_wait_max: The maximum wait time for retries.
+        retry_attempts: The number of retry attempts.
+    """
     class Config:
         arbitrary_types_allowed = True
 
     assistant_name: str
     client: AsyncOpenAI
     temperature: float = Field(default=1, ge=0, le=2)
-    max_prompt_tokens: int = Field(default=4_000, ge=0, le=64_000)
-    max_completion_tokens: int = Field(default=4_000, ge=0, le=64_000)
+    max_tokens: int = Field(default=4_000, ge=0, le=64_000)
+    instructions: Optional[str] = None
+    model: AssistantModel
     retry_wait_min: int = Field(default=4)
     retry_wait_max: int = Field(default=128)
     retry_attempts: int = Field(default=20)
@@ -27,10 +41,14 @@ class ChatAssistant(BaseModel):
     def model_dump(self, **kwargs) -> dict[str, Any]:
         return {
             "assistant_name": self.assistant_name,
-            "assistant_id": self.assistant_id,
             "temperature": self.temperature,
-            "max_prompt_tokens": self.max_prompt_tokens,
-            "max_completion_tokens": self.max_completion_tokens
+            "max_tokens": self.max_tokens,
+            "response_schema": self.response_schema,
+            "instructions": self.instructions,
+            "model": self.model,
+            "retry_wait_min": self.retry_wait_min,
+            "retry_wait_max": self.retry_wait_max,
+            "retry_attempts": self.retry_attempts,
         }
 
     def generate_instructions(self, instructions: str) -> str:
@@ -39,23 +57,19 @@ class ChatAssistant(BaseModel):
     def generate_user_prompt(self, prompt: str) -> str:
         return f"User: {prompt}"
 
-    async def create_run(self, thread_id, assistant_id):
-        logging.info(f"Creating run for thread {thread_id} and assistant {assistant_id}")
-        return await self.client.beta.threads.runs.create_and_poll(thread_id=thread_id,
-                                                                   assistant_id=assistant_id,
-                                                                   temperature=self.temperature,
-                                                                   max_prompt_tokens=self.max_prompt_tokens,
-                                                                   max_completion_tokens=self.max_completion_tokens)
+    async def create_run(self, prompt) -> ParsedChatCompletion:
+        return await self.client.beta.chat.completions.parse(
+            model=self.model.value,
+            messages=[
+                { "role": "system", "content": self.instructions },
+                { "role": "user", "content": prompt },
+            ],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens
+        )
 
     async def _get_response(self, prompt: str) -> str:
-        open_ai_assistant = await self.client.beta.assistants.retrieve(self.assistant_id)
-        thread = await self.client.beta.threads.create()
-        await self.client.beta.threads.messages.create(thread_id=thread.id, role="user", content=prompt)
-        await self.create_run(thread.id, open_ai_assistant.id)
-        messages = await self.client.beta.threads.messages.list(thread_id=thread.id)
-        message = messages.data[0].content[0].text.value
-        logging.info(f"Got response: \"{message}\"")
-        return message
+        return (await self.create_run(prompt)).choices[0].message.content
 
     async def get_dict_response(self, prompt: str) -> dict:
         return json.loads(await self._get_response(prompt))

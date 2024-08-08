@@ -67,18 +67,12 @@ async def create_chat_assistant():
         if model == AssistantModel.GPT_4o:
             logging.error("GPT4o is expensive! Use GPT4o Mini for testing")
 
-        my_assistant = await client.beta.assistants.create(
-            instructions=instructions,
-            name=assistant_name,
-            model=model.value,
-            response_format=response_format,
-        )
-
         test_chat_assistant = ChatAssistant(
-            client=client,
             assistant_name=assistant_name,
-            assistant_id=my_assistant.id,
+            instructions=instructions,
+            client=client,
             temperature=temperature,
+            model=model,
             max_completion_tokens=max_completion_tokens,
             max_prompt_tokens=max_prompt_tokens,
             retry_wait_min=0,
@@ -88,24 +82,18 @@ async def create_chat_assistant():
         chat_assistants.append(test_chat_assistant)
         return test_chat_assistant
 
-    yield _create_chat_assistant
-
-    delete_tasks = [client.beta.assistants.delete(chat_assistant.assistant_id) for chat_assistant in chat_assistants]
-    await asyncio.gather(*delete_tasks)
+    return  _create_chat_assistant
 
 
 @pytest_asyncio.fixture(scope="session")
 async def chat_assistant_gpt4_o_mini(create_chat_assistant):
-    client = AsyncOpenAI()
-
     my_assistant = await create_chat_assistant(
         instructions="You are a Simple Chatbot, Answer in short sentences.",
         assistant_name="Simple Chatbot",
         model=AssistantModel.GPT_4o_MINI,
     )
 
-    yield my_assistant
-    await client.beta.assistants.delete(my_assistant.assistant_id)
+    return my_assistant
 
 
 @pytest.fixture

@@ -9,9 +9,9 @@ from openai import AsyncOpenAI
 from openai.types.beta.threads import Run
 from openai.types.beta.threads.run import Usage
 
-from src.synthetic_data_generator.ai_graph.ai.chat_assistant import ChatAssistant
-from src.synthetic_data_generator.ai_graph.ai.chat_assistant_analysis import AssistantAnalyzer, AssistantRun
-from src.synthetic_data_generator.ai_graph.ai.chat_assistant_config import AssistantModel
+from src.synthetic_data_generator.ai_graph.ai.base_ai import BaseAI
+from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalyzer, AssistantRun
+from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AssistantModel
 from src.synthetic_data_generator.ai_graph.key_value_store import KeyValueStore
 from src.synthetic_data_generator.ai_graph.nodes.executable_node import ExecutableNode
 from src.synthetic_data_generator.random_generators.number_interval_generator import NormalizedNumberGenerator,\
@@ -58,16 +58,14 @@ class ConfigurableEnumSaveNode(ExecutableNode):
 @pytest_asyncio.fixture(scope="session")
 async def create_chat_assistant():
     client = AsyncOpenAI()
-    chat_assistants = []
 
     async def _create_chat_assistant(model: AssistantModel, instructions: str, assistant_name="Test Chatbot",
-                                     response_format=None,
                                      temperature: float = 0.5, max_completion_tokens: int = 400,
                                      max_prompt_tokens: int = 400):
         if model == AssistantModel.GPT_4o:
             logging.error("GPT4o is expensive! Use GPT4o Mini for testing")
 
-        test_chat_assistant = ChatAssistant(
+        test_chat_assistant = BaseAI(
             assistant_name=assistant_name,
             instructions=instructions,
             client=client,
@@ -79,10 +77,9 @@ async def create_chat_assistant():
             retry_wait_max=0,
             retry_attempts=1
         )
-        chat_assistants.append(test_chat_assistant)
         return test_chat_assistant
 
-    return  _create_chat_assistant
+    return _create_chat_assistant
 
 
 @pytest_asyncio.fixture(scope="session")

@@ -3,9 +3,9 @@ import logging
 
 import pytest
 
-from src.synthetic_data_generator.ai_graph.ai.chat_assistant_analysis import AssistantAnalysisResult, AssistantRun,\
+from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalysisResult, AssistantRun,\
     AssistantRuns
-from src.synthetic_data_generator.ai_graph.ai.chat_assistant_config import AssistantModel
+from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AssistantModel
 
 
 @pytest.mark.parametrize("prompt_tokens,completion_tokens,model,expected_cost", [

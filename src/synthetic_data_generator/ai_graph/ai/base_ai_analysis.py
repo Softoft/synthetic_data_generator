@@ -1,5 +1,4 @@
 import enum
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -7,34 +6,7 @@ from typing import Dict, List
 
 from openai.types.beta.threads import Run
 
-from src.synthetic_data_generator.ai_graph.ai.chat_assistant_config import AssistantModel
-
-
-def cost_analyzer(warning_limit: float = 1e-4, error_limit=1e-2):
-    def cost_analyzer_decorator(cls):
-        original_init = cls.__init__
-
-        def new_init(self, *args, **kwargs):
-            original_init(self, *args, **kwargs)
-            original_create_run = self.create_run
-
-            async def wrapped_create_run(*args, **kwargs):
-                logging.info(f"Creating run with args {args} and kwargs {kwargs} for {self.assistant_name}")
-                run = await original_create_run(*args, **kwargs)
-                new_assistant_run = AssistantRun(assistant_name=self.assistant_name, _run=run)
-                if new_assistant_run.cost > warning_limit:
-                    logging.warning(f"Cost of run is {new_assistant_run.cost}")
-                if new_assistant_run.cost > error_limit:
-                    logging.error(f"Cost of run is {new_assistant_run.cost}")
-                AssistantAnalyzer().append_assistant_run(new_assistant_run)
-                return run
-
-            self.create_run = wrapped_create_run
-
-        cls.__init__ = new_init
-        return cls
-
-    return cost_analyzer_decorator
+from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AssistantModel
 
 
 class CostType(Enum):

@@ -1,11 +1,9 @@
-import asyncio
 import logging
 
 import pytest
 
-from src.synthetic_data_generator.ai_graph.ai.base_ai import PlainResponseAI
 from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalysisResult, AssistantRun, \
-    AssistantRuns
+    AssistantRuns, calculate_cost
 from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AIModelType, OpenAIModelVersion
 
 
@@ -73,44 +71,27 @@ def test_print_assistant_analyzer(create_mocked_assistant_run, chat_assistant_an
 
 @pytest.mark.asyncio
 @pytest.mark.slow
-async def test_chat_assistant_analyzer(create_chat_assistant, chat_assistant_analyzer):
-    await (create_chat_assistant(instructions="Answer in a short sentence!",
-                                 model=OpenAIModelVersion(AIModelType.GPT_4o_MINI.value),
-                                 prompt="What is your favorite programming language?")).get_response_with_retry()
+async def test_chat_assistant_analyzer(create_mocked_assistant, chat_assistant_analyzer):
+    await create_mocked_assistant("test1", "gpt-4o-mini", 10, 20).get_chat_completion()
     logging.info(chat_assistant_analyzer)
-    assert chat_assistant_analyzer.total_summary().cost == pytest.approx(0, abs=0.1)
-    assert 0 < chat_assistant_analyzer.total_summary().prompt_tokens < 60
-    assert 0 < chat_assistant_analyzer.total_summary().completion_tokens < 40
+    assert chat_assistant_analyzer.total_summary().cost == calculate_cost(10, 20, AIModelType.GPT_4o_MINI)
+    assert chat_assistant_analyzer.total_summary().prompt_tokens == 10
+    assert 0 < chat_assistant_analyzer.total_summary().completion_tokens == 20
 
 
 @pytest.mark.asyncio
 @pytest.mark.slow
-async def test_chat_assistant_analyzer_get_by_name(create_chat_assistant, chat_assistant_analyzer):
-    async def get_response_for_assistant(assistant, prompt):
-        assistant.prompt = prompt
-        return await assistant.get_response_with_retry()
+async def test_chat_assistant_analyzer_get_by_name(create_mocked_assistant, chat_assistant_analyzer):
+    await create_mocked_assistant("test1", "gpt-4o-mini", 10, 20).get_chat_completion()
+    await create_mocked_assistant("test1", "gpt-4o-mini", 5, 5).get_chat_completion()
+    await create_mocked_assistant("test2", "gpt-4o", 10, 10).get_chat_completion()
 
-    ASSISTANT_NAME1 = "Test1"
-    assistant1: PlainResponseAI = create_chat_assistant(assistant_name=ASSISTANT_NAME1,
-                                                        model=OpenAIModelVersion(
-                                                            AIModelType.GPT_4o_MINI.value),
-                                                        instructions="Answer a question in one word!")
-    ASSISTANT_NAME2 = "Test2"
-    assistant2: PlainResponseAI = create_chat_assistant(assistant_name=ASSISTANT_NAME2,
-                                                        model=OpenAIModelVersion(
-                                                            AIModelType.GPT_4o_MINI.value),
-                                                        instructions="Answer this question, short",
-                                                        temperature=1)
+    summary1 = chat_assistant_analyzer.get_summary_for_assistant("test1")
+    summary2 = chat_assistant_analyzer.get_summary_for_assistant("test2")
 
-    tasks = [get_response_for_assistant(assistant1, "capital of Germany?"),
-             get_response_for_assistant(assistant2, "What Programming Language is the pytest lib from?")]
-
-    await asyncio.gather(*tasks)
-    summary1 = chat_assistant_analyzer.get_summary_for_assistant(ASSISTANT_NAME1)
-    summary2 = chat_assistant_analyzer.get_summary_for_assistant(ASSISTANT_NAME2)
-
-    assert summary1.prompt_tokens > 0
-    assert summary1.completion_tokens > 0
-    assert summary1.prompt_tokens < summary2.prompt_tokens
-    assert summary1.completion_tokens < summary2.completion_tokens
-    assert summary1.cost < summary2.cost
+    assert summary1.prompt_tokens == 15
+    assert summary1.completion_tokens == 25
+    assert summary1.cost == calculate_cost(15, 25, AIModelType.GPT_4o_MINI)
+    assert summary2.prompt_tokens == 10
+    assert summary2.completion_tokens == 10
+    assert summary2.cost == calculate_cost(10, 10, AIModelType.GPT_4o)

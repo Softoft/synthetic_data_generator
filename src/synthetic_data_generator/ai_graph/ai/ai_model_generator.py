@@ -22,7 +22,7 @@ class AIModelGenerator(BaseAIModel):
 
     async def get_parsed_completion(self, output_model: type[pydantic.BaseModel]) -> pydantic.BaseModel:
         prompt = self.input_instance.get_prompt()
-        return await self._client.beta.chat.completions.parse(
+        return (await self._client.beta.chat.completions.parse(
             model=self._model.get_model_version(),
             messages=[
                 {"role": "system", "content": self._instructions},
@@ -31,4 +31,4 @@ class AIModelGenerator(BaseAIModel):
             temperature=self._temperature,
             response_format=output_model,
             max_tokens=self._max_tokens
-        )
+        )).choices[0].message.parsed

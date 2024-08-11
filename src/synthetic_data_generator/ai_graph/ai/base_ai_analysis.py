@@ -117,12 +117,8 @@ class CostCalculable(ABC):
         )
 
 
-class AssistantRun(CostCalculable):
-    def __init__(self, assistant_name: str, run: ChatCompletionAssistantRunAdapter):
-        self.assistant_name = assistant_name
-        self.run = run
-
-    cost_map: dict[CostType, dict[AIModelType, float]] = {
+def calculate_cost(prompt_tokens, completion_tokens, model_type):
+    cost_map = {
         CostType.INPUT: {
             AIModelType.GPT_4o: 5e-6,
             AIModelType.GPT_4o_MINI: 0.15e-6,
@@ -132,6 +128,15 @@ class AssistantRun(CostCalculable):
             AIModelType.GPT_4o_MINI: 0.6e-6,
         }
     }
+    input_cost = cost_map[CostType.INPUT][model_type] * prompt_tokens
+    output_cost = cost_map[CostType.OUTPUT][model_type] * completion_tokens
+    return input_cost + output_cost
+
+
+class AssistantRun(CostCalculable):
+    def __init__(self, assistant_name: str, run: ChatCompletionAssistantRunAdapter):
+        self.assistant_name = assistant_name
+        self.run = run
 
     @property
     def model(self) -> OpenAIModelVersion:
@@ -147,9 +152,7 @@ class AssistantRun(CostCalculable):
 
     @property
     def cost(self) -> float:
-        input_cost = self.cost_map[CostType.INPUT][self.model.get_model_type()] * self.prompt_tokens
-        output_cost = self.cost_map[CostType.OUTPUT][self.model.get_model_type()] * self.completion_tokens
-        return input_cost + output_cost
+        return calculate_cost(self.prompt_tokens, self.completion_tokens, self.model.get_model_type())
 
 
 @dataclass

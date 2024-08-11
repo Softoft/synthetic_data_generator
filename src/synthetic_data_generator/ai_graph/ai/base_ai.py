@@ -19,8 +19,6 @@ from src.synthetic_data_generator.ai_graph.ai.i_ai_model import IAIModel
 
 @cost_analyzer()
 class BaseAIModel[ResultType](IAIModel, ABC):
-    test: str
-
     def __init__(self,
                  assistant_name: str,
                  client: AsyncOpenAI,

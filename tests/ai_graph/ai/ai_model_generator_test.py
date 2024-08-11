@@ -28,7 +28,7 @@ async def test_ai_model_generator():
         client=AsyncOpenAI(),
         temperature=0.5,
         max_tokens=100,
-        instructions="What country is the city in?",
+        instructions="country of this city",
         output_model=Country,
         open_ai_model_version=OpenAIModelVersion(model_version=AIModelType.GPT_4o_MINI.value),
         retry_wait_min=0,
@@ -37,3 +37,4 @@ async def test_ai_model_generator():
         input_instance=city
     )
     country = await ai_model_generator.get_parsed_completion(Country)
+    assert country.name == "Germany"

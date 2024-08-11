@@ -4,12 +4,14 @@ from enum import auto
 from unittest.mock import Mock, create_autospec
 
 import pytest
-import pytest_asyncio
 from openai import AsyncOpenAI
+from openai.types import CompletionUsage
 from openai.types.beta.threads.run import Usage
+from openai.types.chat import ChatCompletion
 
 from src.synthetic_data_generator.ai_graph.ai.base_ai import PlainResponseAI
-from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalyzer, AssistantRun, IAssistantRun
+from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalyzer, AssistantRun, IAssistantRun, \
+    cost_analyzer
 from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AIModelType, OpenAIModelVersion
 from src.synthetic_data_generator.ai_graph.key_value_store import KeyValueStore
 from src.synthetic_data_generator.ai_graph.nodes.executable_node import ExecutableNode
@@ -54,7 +56,7 @@ class ConfigurableEnumSaveNode(ExecutableNode):
         return shared_storage
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest.fixture(scope="session")
 def create_chat_assistant():
     client = AsyncOpenAI()
 
@@ -72,13 +74,31 @@ def create_chat_assistant():
     return _create_chat_assistant
 
 
-@pytest_asyncio.fixture(scope="session")
-async def chat_assistant_gpt4_o_mini(create_chat_assistant):
-    my_assistant = create_chat_assistant(instructions="You are a Simple Chatbot, Answer in short sentences.",
-                                         assistant_name="Simple Chatbot",
-                                         model=OpenAIModelVersion(model_version=AIModelType.GPT_4o_MINI.value))
+@pytest.fixture(scope="session")
+def create_mocked_assistant(create_chat_assistant):
+    @cost_analyzer()
+    class TestAssistant:
+        def __init__(self, assistant_name, model_version: str, prompt_tokens, completion_tokens):
+            self.model_version = model_version
+            self.assistant_name = assistant_name
+            self.completion_tokens = completion_tokens
+            self.prompt_tokens = prompt_tokens
 
-    return my_assistant
+        async def _get_chat_completion(self):
+            chat_completion = Mock(spec=ChatCompletion)
+            chat_completion.usage = CompletionUsage(completion_tokens=self.completion_tokens,
+                                                    prompt_tokens=self.prompt_tokens,
+                                                    total_tokens=self.completion_tokens + self.prompt_tokens)
+            chat_completion.model = self.model_version
+            return chat_completion
+
+        async def get_chat_completion(self):
+            return await self._get_chat_completion()
+
+    def _create_mocked_assistant(assistant_name, model_version, prompt_tokens, completion_tokens):
+        return TestAssistant(assistant_name, model_version, prompt_tokens, completion_tokens)
+
+    return _create_mocked_assistant
 
 
 @pytest.fixture

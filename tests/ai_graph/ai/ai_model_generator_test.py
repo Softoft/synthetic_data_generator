@@ -3,7 +3,7 @@ from openai import AsyncOpenAI
 
 from src.synthetic_data_generator.ai_graph.ai.ai_model import InputModel, OutputModel
 from src.synthetic_data_generator.ai_graph.ai.ai_model_generator import AIModelGenerator
-from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AssistantModel
+from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AIModelType, OpenAIModelVersion
 
 
 class City(InputModel):
@@ -29,7 +29,8 @@ async def test_ai_model_generator():
         temperature=0.5,
         max_tokens=100,
         instructions="What country is the city in?",
-        model=AssistantModel.GPT_4o,
+        output_model=Country,
+        open_ai_model_version=OpenAIModelVersion(model_version=AIModelType.GPT_4o_MINI.value),
         retry_wait_min=0,
         retry_wait_max=0,
         retry_attempts=1,

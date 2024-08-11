@@ -6,15 +6,14 @@ from unittest.mock import Mock, create_autospec
 import pytest
 import pytest_asyncio
 from openai import AsyncOpenAI
-from openai.types.beta.threads import Run
 from openai.types.beta.threads.run import Usage
 
-from src.synthetic_data_generator.ai_graph.ai.base_ai import BaseAI
-from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalyzer, AssistantRun
-from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AssistantModel
+from src.synthetic_data_generator.ai_graph.ai.base_ai import PlainResponseAI
+from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalyzer, AssistantRun, IAssistantRun
+from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AIModelType, OpenAIModelVersion
 from src.synthetic_data_generator.ai_graph.key_value_store import KeyValueStore
 from src.synthetic_data_generator.ai_graph.nodes.executable_node import ExecutableNode
-from src.synthetic_data_generator.random_generators.number_interval_generator import NormalizedNumberGenerator,\
+from src.synthetic_data_generator.random_generators.number_interval_generator import NormalizedNumberGenerator, \
     NumberIntervalGenerator
 from src.synthetic_data_generator.random_generators.random_collection import RandomCollectionFactory
 from src.synthetic_data_generator.random_generators.random_collection_table import RandomTableBuilder
@@ -56,27 +55,18 @@ class ConfigurableEnumSaveNode(ExecutableNode):
 
 
 @pytest_asyncio.fixture(scope="session")
-async def create_chat_assistant():
+def create_chat_assistant():
     client = AsyncOpenAI()
 
-    async def _create_chat_assistant(model: AssistantModel, instructions: str, assistant_name="Test Chatbot",
-                                     temperature: float = 0.5, max_completion_tokens: int = 400,
-                                     max_prompt_tokens: int = 400):
-        if model == AssistantModel.GPT_4o:
+    def _create_chat_assistant(model: OpenAIModelVersion, instructions: str, assistant_name="Test Chatbot",
+                               temperature: float = 0.5, max_tokens: int = 400, prompt: str = ""):
+        if model == AIModelType.GPT_4o:
             logging.error("GPT4o is expensive! Use GPT4o Mini for testing")
 
-        test_chat_assistant = BaseAI(
-            assistant_name=assistant_name,
-            instructions=instructions,
-            client=client,
-            temperature=temperature,
-            model=model,
-            max_completion_tokens=max_completion_tokens,
-            max_prompt_tokens=max_prompt_tokens,
-            retry_wait_min=0,
-            retry_wait_max=0,
-            retry_attempts=1
-        )
+        test_chat_assistant = PlainResponseAI(assistant_name=assistant_name, instructions=instructions, client=client,
+                                              temperature=temperature, model=model, max_tokens=max_tokens,
+                                              retry_wait_min=0, retry_wait_max=0,
+                                              retry_attempts=1, prompt=prompt)
         return test_chat_assistant
 
     return _create_chat_assistant
@@ -84,23 +74,21 @@ async def create_chat_assistant():
 
 @pytest_asyncio.fixture(scope="session")
 async def chat_assistant_gpt4_o_mini(create_chat_assistant):
-    my_assistant = await create_chat_assistant(
-        instructions="You are a Simple Chatbot, Answer in short sentences.",
-        assistant_name="Simple Chatbot",
-        model=AssistantModel.GPT_4o_MINI,
-    )
+    my_assistant = create_chat_assistant(instructions="You are a Simple Chatbot, Answer in short sentences.",
+                                         assistant_name="Simple Chatbot",
+                                         model=OpenAIModelVersion(model_version=AIModelType.GPT_4o_MINI.value))
 
     return my_assistant
 
 
 @pytest.fixture
 def create_assistant_run():
-    def _create_assistant_run(assistant_name, completion_tokens, prompt_tokens, model: AssistantModel):
-        run = Mock(spec=Run)
-        run.usage = Usage(completion_tokens=completion_tokens, prompt_tokens=prompt_tokens,
-                          total_tokens=completion_tokens + prompt_tokens)
-        run.model = model.value
-        return AssistantRun(_run=run, assistant_name=assistant_name)
+    def _create_assistant_run(assistant_name, completion_tokens, prompt_tokens, model: OpenAIModelVersion):
+        run = Mock(spec=IAssistantRun)
+        run.get_usage.return_value = Usage(completion_tokens=completion_tokens, prompt_tokens=prompt_tokens,
+                                           total_tokens=completion_tokens + prompt_tokens)
+        run.get_model.return_value = model
+        return AssistantRun(run=run, assistant_name=assistant_name)
 
     return _create_assistant_run
 
@@ -110,7 +98,7 @@ def create_mocked_assistant_run():
     def _create_mocked_assistant_run(completion_tokens, prompt_tokens, cost: float):
         run = create_autospec(AssistantRun, instance=True)
         run.assistant_name = "Test"
-        run.model = AssistantModel.GPT_4o_MINI
+        run.model = AIModelType.GPT_4o_MINI
         run.prompt_tokens = prompt_tokens
         run.completion_tokens = completion_tokens
         run.cost = cost
@@ -194,9 +182,7 @@ def setup_logging():
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(levelname)s - %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
 

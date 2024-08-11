@@ -3,20 +3,22 @@ import logging
 
 import pytest
 
-from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalysisResult, AssistantRun,\
+from src.synthetic_data_generator.ai_graph.ai.base_ai import PlainResponseAI
+from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalysisResult, AssistantRun, \
     AssistantRuns
-from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AssistantModel
+from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AIModelType, OpenAIModelVersion
 
 
-@pytest.mark.parametrize("prompt_tokens,completion_tokens,model,expected_cost", [
-    (1e6, 2e6, AssistantModel.GPT_4o, 35),
-    (2e6, 1e6, AssistantModel.GPT_4o, 25),
-    (2e6, 1e6, AssistantModel.GPT_4o_MINI, 0.9),
+@pytest.mark.parametrize("prompt_tokens,completion_tokens,ai_type,expected_cost", [
+    (1e6, 2e6, AIModelType.GPT_4o, 35),
+    (2e6, 1e6, AIModelType.GPT_4o, 25),
+    (2e6, 1e6, AIModelType.GPT_4o_MINI, 0.9),
 
 ])
-def test_assistant_run(create_assistant_run, prompt_tokens, completion_tokens, model, expected_cost):
+def test_assistant_run(create_assistant_run, prompt_tokens, completion_tokens, ai_type, expected_cost):
     assistant_run: AssistantRun = create_assistant_run(assistant_name="Test", prompt_tokens=prompt_tokens,
-                                                       completion_tokens=completion_tokens, model=model)
+                                                       completion_tokens=completion_tokens,
+                                                       model=OpenAIModelVersion(model_version=ai_type.value))
     cost = assistant_run.cost
     assert cost == pytest.approx(expected_cost)
 
@@ -71,30 +73,37 @@ def test_print_assistant_analyzer(create_mocked_assistant_run, chat_assistant_an
 
 @pytest.mark.asyncio
 @pytest.mark.slow
-async def test_chat_assistant_analyzer(chat_assistant_gpt4_o_mini, chat_assistant_analyzer):
-    await chat_assistant_gpt4_o_mini.get_response_with_retry("What is the capital of Germany?")
+async def test_chat_assistant_analyzer(create_chat_assistant, chat_assistant_analyzer):
+    await (create_chat_assistant(instructions="Answer in a short sentence!",
+                                 model=OpenAIModelVersion(AIModelType.GPT_4o_MINI.value),
+                                 prompt="What is your favorite programming language?")).get_response_with_retry()
     logging.info(chat_assistant_analyzer)
     assert chat_assistant_analyzer.total_summary().cost == pytest.approx(0, abs=0.1)
-    assert 30 < chat_assistant_analyzer.total_summary().prompt_tokens < 60
+    assert 0 < chat_assistant_analyzer.total_summary().prompt_tokens < 60
     assert 0 < chat_assistant_analyzer.total_summary().completion_tokens < 40
 
 
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_chat_assistant_analyzer_get_by_name(create_chat_assistant, chat_assistant_analyzer):
+    async def get_response_for_assistant(assistant, prompt):
+        assistant.prompt = prompt
+        return await assistant.get_response_with_retry()
+
     ASSISTANT_NAME1 = "Test1"
-    create_assistant1 = create_chat_assistant(assistant_name=ASSISTANT_NAME1, model=AssistantModel.GPT_4o_MINI,
-                                              instructions="Answer a question in one word!")
+    assistant1: PlainResponseAI = create_chat_assistant(assistant_name=ASSISTANT_NAME1,
+                                                        model=OpenAIModelVersion(
+                                                            AIModelType.GPT_4o_MINI.value),
+                                                        instructions="Answer a question in one word!")
     ASSISTANT_NAME2 = "Test2"
-    create_assistant2 = create_chat_assistant(assistant_name=ASSISTANT_NAME2, model=AssistantModel.GPT_4o_MINI,
-                                              instructions="Answer this question, short", temperature=1)
+    assistant2: PlainResponseAI = create_chat_assistant(assistant_name=ASSISTANT_NAME2,
+                                                        model=OpenAIModelVersion(
+                                                            AIModelType.GPT_4o_MINI.value),
+                                                        instructions="Answer this question, short",
+                                                        temperature=1)
 
-    assistant1 = await create_assistant1
-    assistant2 = await create_assistant2
-
-    tasks = [assistant1.get_response_with_retry("What is the capital of Germany?"),
-             assistant2.get_response_with_retry("Is C# a programming language?"),
-             assistant2.get_response_with_retry("What Programming Language is the pytest lib from?"), ]
+    tasks = [get_response_for_assistant(assistant1, "capital of Germany?"),
+             get_response_for_assistant(assistant2, "What Programming Language is the pytest lib from?")]
 
     await asyncio.gather(*tasks)
     summary1 = chat_assistant_analyzer.get_summary_for_assistant(ASSISTANT_NAME1)

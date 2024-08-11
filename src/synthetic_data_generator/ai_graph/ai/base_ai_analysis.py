@@ -1,17 +1,94 @@
 import enum
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List
 
-from openai.types.beta.threads import Run
+import pydantic
+from openai.types import CompletionUsage
+from openai.types.chat import ChatCompletion
 
-from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AssistantModel
+from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AIModelType, OpenAIModelVersion
+from src.synthetic_data_generator.ai_graph.ai.i_ai_model import IAIModel
+
+
+def cost_analyzer(warning_limit: float = 1e-4, error_limit=1e-2):
+    def cost_analyzer_decorator(cls: IAIModel):
+        original_init = cls.__init__
+
+        def new_init(self: IAIModel, *args, **kwargs):
+            original_init(self, *args, **kwargs)
+            _get_chat_completion = self._get_chat_completion
+
+            async def wrapped_chat_completion(*_args, **_kwargs):
+                chat_completion: ChatCompletion = await _get_chat_completion()
+                new_assistant_run = AssistantRun(assistant_name=self.assistant_name,
+                                                 run=ChatCompletionAssistantRunAdapter(
+                                                     chat_completion=chat_completion))
+                if new_assistant_run.cost > warning_limit:
+                    logging.warning(f"Cost of run is {new_assistant_run.cost}")
+                if new_assistant_run.cost > error_limit:
+                    logging.error(f"Cost of run is {new_assistant_run.cost}")
+                AssistantAnalyzer().append_assistant_run(new_assistant_run)
+                return chat_completion
+
+            self._get_chat_completion = wrapped_chat_completion
+
+        cls.__init__ = new_init
+        return cls
+
+    return cost_analyzer_decorator
 
 
 class CostType(Enum):
     INPUT = enum.auto()
     OUTPUT = enum.auto()
+
+
+class IUsage(ABC):
+    @property
+    @abstractmethod
+    def prompt_tokens(self) -> int:
+        pass
+
+    @property
+    @abstractmethod
+    def completion_tokens(self) -> int:
+        pass
+
+
+class IAssistantRun(ABC):
+    @abstractmethod
+    def get_model(self) -> str:
+        pass
+
+    @abstractmethod
+    def get_usage(self) -> IUsage:
+        pass
+
+
+class UsageAdapter(pydantic.BaseModel, IUsage):
+    usage: CompletionUsage
+
+    @property
+    def prompt_tokens(self):
+        return self.usage.prompt_tokens
+
+    @property
+    def completion_tokens(self):
+        return self.usage.completion_tokens
+
+
+class ChatCompletionAssistantRunAdapter(pydantic.BaseModel, IAssistantRun):
+    chat_completion: ChatCompletion
+
+    def get_model(self) -> OpenAIModelVersion:
+        return OpenAIModelVersion(self.chat_completion.model)
+
+    def get_usage(self) -> IUsage:
+        assert self.chat_completion.usage is not None, "Usage is None"
+        return UsageAdapter(usage=self.chat_completion.usage)
 
 
 class CostCalculable(ABC):
@@ -40,41 +117,38 @@ class CostCalculable(ABC):
         )
 
 
-@dataclass
 class AssistantRun(CostCalculable):
-    assistant_name: str
-    _run: Run
+    def __init__(self, assistant_name: str, run: ChatCompletionAssistantRunAdapter):
+        self.assistant_name = assistant_name
+        self.run = run
 
-    cost_map = {
+    cost_map: dict[CostType, dict[AIModelType, float]] = {
         CostType.INPUT: {
-            AssistantModel.GPT_4o: 5e-6,
-            AssistantModel.GPT_4o_MINI: 0.15e-6,
+            AIModelType.GPT_4o: 5e-6,
+            AIModelType.GPT_4o_MINI: 0.15e-6,
         },
         CostType.OUTPUT: {
-            AssistantModel.GPT_4o: 15e-6,
-            AssistantModel.GPT_4o_MINI: 0.6e-6,
+            AIModelType.GPT_4o: 15e-6,
+            AIModelType.GPT_4o_MINI: 0.6e-6,
         }
     }
 
-    def __post_init__(self):
-        assert isinstance(self._run, Run)
-
     @property
-    def model(self):
-        return AssistantModel(self._run.model)
+    def model(self) -> OpenAIModelVersion:
+        return self.run.get_model()
 
     @property
     def prompt_tokens(self) -> int:
-        return self._run.usage.prompt_tokens
+        return self.run.get_usage().prompt_tokens
 
     @property
     def completion_tokens(self) -> int:
-        return self._run.usage.completion_tokens
+        return self.run.get_usage().completion_tokens
 
     @property
     def cost(self) -> float:
-        input_cost = self.cost_map[CostType.INPUT][self.model] * self.prompt_tokens
-        output_cost = self.cost_map[CostType.OUTPUT][self.model] * self.completion_tokens
+        input_cost = self.cost_map[CostType.INPUT][self.model.get_model_type()] * self.prompt_tokens
+        output_cost = self.cost_map[CostType.OUTPUT][self.model.get_model_type()] * self.completion_tokens
         return input_cost + output_cost
 
 
@@ -158,5 +232,5 @@ class AssistantAnalyzer:
                 assistant_name_runs.items()]
 
     def _group_runs_by_assistant(self) -> Dict[str, List[AssistantRun]]:
-        assistant_names = { run.assistant_name for run in self._runs }
-        return { name: [run for run in self._runs if run.assistant_name == name] for name in assistant_names }
+        assistant_names = {run.assistant_name for run in self._runs}
+        return {name: [run for run in self._runs if run.assistant_name == name] for name in assistant_names}

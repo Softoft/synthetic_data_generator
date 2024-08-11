@@ -9,7 +9,6 @@ from openai.types import CompletionUsage
 from openai.types.beta.threads.run import Usage
 from openai.types.chat import ChatCompletion
 
-from src.synthetic_data_generator.ai_graph.ai.base_ai import PlainResponseAI
 from src.synthetic_data_generator.ai_graph.ai.base_ai_analysis import AssistantAnalyzer, AssistantRun, IAssistantRun, \
     cost_analyzer
 from src.synthetic_data_generator.ai_graph.ai.base_ai_config import AIModelType, OpenAIModelVersion
@@ -22,6 +21,8 @@ from src.synthetic_data_generator.random_generators.random_collection_table impo
 from src.synthetic_data_generator.random_nodes.random_collection_node import RandomCollectionNode
 from src.synthetic_data_generator.random_nodes.random_table_node import RandomTableNode
 from src.synthetic_data_generator.random_nodes.ticket_field import ComparableEnum
+from synthetic_data_generator.ai_graph.ai.open_ai_client import OpenAiClient
+from synthetic_data_generator.ai_graph.ai.plain_response_ai import PlainResponseAI
 
 
 class KeyEnum(ComparableEnum):
@@ -61,14 +62,15 @@ def create_chat_assistant():
     client = AsyncOpenAI()
 
     def _create_chat_assistant(model: OpenAIModelVersion, instructions: str, assistant_name="Test Chatbot",
-                               temperature: float = 0.5, max_tokens: int = 400, prompt: str = ""):
+                               temperature: float = 0.5, max_tokens: int = 400):
         if model == AIModelType.GPT_4o:
             logging.error("GPT4o is expensive! Use GPT4o Mini for testing")
 
-        test_chat_assistant = PlainResponseAI(assistant_name=assistant_name, instructions=instructions, client=client,
+        test_chat_assistant = PlainResponseAI(assistant_name=assistant_name, instructions=instructions,
+                                              client=OpenAiClient(client),
                                               temperature=temperature, model=model, max_tokens=max_tokens,
                                               retry_wait_min=0, retry_wait_max=0,
-                                              retry_attempts=1, prompt=prompt)
+                                              retry_attempts=1)
         return test_chat_assistant
 
     return _create_chat_assistant

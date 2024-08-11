@@ -22,7 +22,7 @@ def cost_analyzer(warning_limit: float = 1e-4, error_limit=1e-2):
             _get_chat_completion = self._get_chat_completion
 
             async def wrapped_chat_completion(*_args, **_kwargs):
-                chat_completion: ChatCompletion = await _get_chat_completion()
+                chat_completion: ChatCompletion = await _get_chat_completion(*_args, **_kwargs)
                 new_assistant_run = AssistantRun(assistant_name=self.assistant_name,
                                                  run=ChatCompletionAssistantRunAdapter(
                                                      chat_completion=chat_completion))

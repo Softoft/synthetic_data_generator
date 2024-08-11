@@ -1,15 +1,15 @@
 import logging
 import math
 from abc import ABC
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
 
-@dataclass
 class NumberInterval:
-    lower_bound: float
-    upper_bound: float
+    def __init__(self, lower_bound: float, upper_bound: float):
+        self.lower_bound = lower_bound
+        self.upper_bound = upper_bound
 
     @classmethod
     def get_positive_interval(cls):
@@ -42,21 +42,14 @@ class NormalizedNumberGenerator(NumberGenerator):
 
 @dataclass
 class NumberIntervalGenerator:
-    """
-    Generates a random number interval based on a normal distribution.
-    Attributes:
-        mean (float): The mean of the normal distribution.
-        standard_deviation (float): The standard deviation of the normal distribution.
-        min_upper_bound_difference (float): The minimum difference between the lower and upper bounds.
-        lower_number_bounds (NumberInterval): The bounds for the lower number.
-        lower_number_generator (NormalizedNumberGenerator): Optional. The generator for the lower number.
-    """
-    mean: float
-    lower_number_generator: NumberGenerator
-    standard_deviation: float
-    min_upper_bound_difference: float
-    lower_number_bounds: NumberInterval = field(
-        default_factory=lambda: NumberInterval.get_positive_interval())
+    def __init__(self, mean: float, lower_number_generator: NumberGenerator, standard_deviation: float,
+                 min_upper_bound_difference: float,
+                 lower_number_bounds: NumberInterval = NumberInterval.get_positive_interval()):
+        self.mean = mean
+        self.lower_number_generator = lower_number_generator
+        self.standard_deviation = standard_deviation
+        self.min_upper_bound_difference = min_upper_bound_difference
+        self.lower_number_bounds = lower_number_bounds
 
     def _generate_upper_bound(self, lower_bound: int) -> int:
         upper_bound_factor = math.log2(max(2, abs(lower_bound)))

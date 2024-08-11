@@ -6,12 +6,8 @@ class Storage{
     + {abstract} load(): Object
 }
 
-class InputType{
-    + get_input_description(): string
-}
-
-class OutputType{
-    + get_output_description(): string
+class ModelDescriber{
+    + {abstract} describe(inputs): string
 }
 
 class Generator{

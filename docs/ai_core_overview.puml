@@ -1,0 +1,31 @@
+@startuml
+
+
+class ModelDescriber{
+    + {abstract} describe(*base_models): string
+}
+
+class BaseModel{
+    + field1: type1
+    + field2: type2
+}
+
+class AIAssistant{
+    + {abstract} get_response(inputs): ChatCompletion[str]
+}
+
+class ModelAIAssistant extends AIAssistant{
+    + get_response(inputs): ParsedChatCompletion[BaseModel]
+}
+
+
+
+annotation CostAnalyzer extends AIAssistant{
+    + get_response(inputs): ChatCompletion
+}
+
+
+ModelDescriber ..> BaseModel: "describes"
+CostAnalyzer .down.> AIAssistant
+AIAssistant o--> ModelDescriber
+@enduml

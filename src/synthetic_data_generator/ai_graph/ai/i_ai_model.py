@@ -5,21 +5,14 @@ from openai.types.chat import ChatCompletion
 
 class IAIModel[ResultType](ABC):
     @abstractmethod
-    async def _get_chat_completion(self) -> ChatCompletion:
-        pass
-
-    @abstractmethod
-    async def _get_string_response(self) -> str:
-        pass
-
-    @abstractmethod
-    def _create_prompt(self) -> str:
+    async def _get_chat_completion(self, *args, **kwargs) -> ChatCompletion:
         pass
 
     @property
-    def assistant_name(self):
-        return ""
+    @abstractmethod
+    def assistant_name(self) -> str:
+        pass
 
     @abstractmethod
-    async def get_response_with_retry(self) -> ResultType:
+    async def get_response_with_retry(self, *args, **kwargs) -> ResultType:
         pass
